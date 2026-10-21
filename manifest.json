@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "自动阅读助手 · 自动滚动",
+  "version": "1.0.0",
+  "description": "自动向下滑动页面，滑动速度可调；支持快捷键、悬浮面板、到底自动进入下一章。",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "自动阅读助手",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "commands": {
+    "toggle-scroll": {
+      "suggested_key": { "default": "Alt+S" },
+      "description": "开始 / 暂停自动滚动"
+    },
+    "speed-up": {
+      "suggested_key": { "default": "Alt+Up" },
+      "description": "加快滚动速度"
+    },
+    "speed-down": {
+      "suggested_key": { "default": "Alt+Down" },
+      "description": "减慢滚动速度"
+    },
+    "scroll-top": {
+      "suggested_key": { "default": "Alt+T" },
+      "description": "回到页面顶部"
+    }
+  }
+}

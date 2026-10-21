@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>自动阅读助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <h1>自动阅读助手</h1>
+    <span class="badge" id="status">读取中…</span>
+  </header>
+
+  <section class="card">
+    <div class="speedTop">
+      <span>滑动速度</span>
+      <span class="big"><span id="speedNum">60</span><small>px/s</small></span>
+    </div>
+    <input type="range" id="speedRange" min="2" max="120" step="1" value="12">
+    <div class="presets">
+      <button data-speed="6">慢 6</button>
+      <button data-speed="12">舒适 12</button>
+      <button data-speed="24">快 24</button>
+      <button data-speed="50">极速 50</button>
+    </div>
+    <div class="cpm">≈ <span id="cpmNum">650</span> 字 / 分钟（按当前页面文字密度估算）</div>
+    <div class="eta" id="eta">剩余时间 —</div>
+  </section>
+
+  <section class="card">
+    <label class="row">
+      <span>到底自动进入下一章</span>
+      <span class="switch"><input type="checkbox" data-key="autoNext"><i></i></span>
+    </label>
+    <label class="row">
+      <span>平滑滑动</span>
+      <span class="switch"><input type="checkbox" data-key="smooth"><i></i></span>
+    </label>
+    <label class="row">
+      <span>鼠标移到控制条上暂停</span>
+      <span class="switch"><input type="checkbox" data-key="hoverPause"><i></i></span>
+    </label>
+    <label class="row">
+      <span>手动滚动时暂停</span>
+      <span class="switch"><input type="checkbox" data-key="manualPause"><i></i></span>
+    </label>
+    <label class="row">
+      <span>换章后自动继续</span>
+      <span class="switch"><input type="checkbox" data-key="resumeOnLoad"><i></i></span>
+    </label>
+  </section>
+
+  <div class="actions">
+    <button id="toggleBtn" class="primary">开始滚动</button>
+    <button id="topBtn">回到顶部</button>
+    <button id="panelBtn">显示控制条</button>
+  </div>
+
+  <p class="hint">快捷键：Alt+S 开始/暂停 · Alt+↑ 加速 · Alt+↓ 减速 · Alt+T 回顶部<br>页面右侧的悬浮条可以直接调节速度，也可以拖动位置。</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
