@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "自动阅读助手 · 自动滚动",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "自动向下滑动页面，滑动速度可调；支持快捷键、悬浮面板、到底自动进入下一章。",
   "minimum_chrome_version": "102",
   "permissions": ["storage", "scripting", "activeTab"],

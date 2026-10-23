@@ -154,6 +154,11 @@ input[type="range"]::-webkit-slider-thumb {
 
 .actions button:hover { background: #dfe4ee; }
 
+.actions button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
 .actions .primary {
   grid-column: span 3;
   background: #3b82f6;

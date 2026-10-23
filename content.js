@@ -9,6 +9,19 @@
   const SPEED_MIN = 2;   // 像素 / 秒
   const SPEED_MAX = 120;
 
+  /* 正文识别参数：只决定悬浮条是否显示，不改变滚动行为 */
+  const ARTICLE_MIN_TEXT = 400;
+  const ARTICLE_MIN_SCORE = 750;
+  const ARTICLE_LABEL_POSITIVE = /article|content|chapter|read|entry|main|post|text|novel|story|book/i;
+  const ARTICLE_LABEL_NEGATIVE = /comment|nav|menu|sidebar|footer|share|related|recommend|advert|banner|copyright|toolbar|reward|gift|rank|list/i;
+  const ARTICLE_SELECTOR = [
+    'article', 'main', '[role="main"]', '[itemprop="articleBody"]',
+    '#content', '#article', '#chapter-content', '#chapterContent', '#j_chapterBox',
+    '.content', '.article', '.article-content', '.content-text', '.post', '.entry',
+    '.chapter', '.chapter-content', '.read-content', '.j_readContent',
+    '.novel-content', '.book-content', '.text-content', '.main-text'
+  ].join(',');
+
   const DEFAULTS = {
     speed: 12,          // 滑动速度，像素 / 秒
     smooth: true,       // 逐帧平滑滑动
@@ -39,6 +52,11 @@
   let nextAttempts = 0; // 连续自动翻章的尝试次数，用于识别「点了但没换页」
   let density = 0.9;    // 估算的文字密度：字 / 像素
   let lastDensityTs = 0;
+  let articleDetected = false;
+  let detectTimer = null;
+  let detectAttempts = 0;
+  let lastDetectTs = 0;
+  let lastHref = location.href;
 
   /* ------------------------------------------------------------------ 存储 */
 
@@ -138,11 +156,137 @@
     }
   }
 
+  /* ------------------------------------------------------------ 正文识别 */
+
+  function plainText(el) {
+    try {
+      return (el.innerText || el.textContent || '').replace(/\s+/g, '');
+    } catch (e) {
+      return (el.textContent || '').replace(/\s+/g, '');
+    }
+  }
+
+  function punctuationCount(text) {
+    return (text.match(/[，。！？；：、…—,.!?;:]/g) || []).length;
+  }
+
+  /* 给一个候选块打分：正文长度 + 段落 + 标点密度 − 链接密度 */
+  function scoreArticleBlock(el) {
+    if (!el || el.id === 'auto-reader-host') return 0;
+    const text = plainText(el);
+    if (text.length < ARTICLE_MIN_TEXT) return 0;
+
+    let linkChars = 0;
+    for (const a of el.querySelectorAll('a')) {
+      linkChars += (a.textContent || '').replace(/\s+/g, '').length;
+    }
+    const linkDensity = Math.min(1, linkChars / text.length);
+    if (linkDensity > 0.35) return 0;
+
+    const punctDensity = punctuationCount(text) / text.length;
+    if (punctDensity < 0.02) return 0;
+
+    const paragraphs = el.querySelectorAll('p').length;
+    const label = `${typeof el.className === 'string' ? el.className : ''} ${el.id || ''}`;
+    let score = text.length + paragraphs * 25 + punctDensity * 2000 - linkDensity * 2500;
+    if (ARTICLE_LABEL_POSITIVE.test(label)) score += 400;
+    if (ARTICLE_LABEL_NEGATIVE.test(label)) score -= 600;
+    return score;
+  }
+
+  /* 页面级信号：og:type=article 或 JSON-LD 里的 Article */
+  function articleMetaBonus() {
+    try {
+      const og = document.querySelector('meta[property="og:type"]');
+      if (og && /article|book|novel|story/i.test(og.getAttribute('content') || '')) return 300;
+      const head = document.head ? document.head.innerHTML : '';
+      if (/["']@type["']\s*:\s*["'](?:Article|NewsArticle|BlogPosting|Book|Chapter)["']/.test(head)) return 300;
+    } catch (e) {
+      /* 忽略 */
+    }
+    return 0;
+  }
+
+  /* 兜底：没有语义标签的站点，按整页文字质量判断 */
+  function fallbackLooksLikeArticle() {
+    const body = document.body;
+    if (!body) return false;
+    const text = plainText(body);
+    if (text.length < 1500) return false;
+    let linkChars = 0;
+    for (const a of body.querySelectorAll('a')) {
+      linkChars += (a.textContent || '').replace(/\s+/g, '').length;
+    }
+    const linkDensity = linkChars / text.length;
+    return linkDensity <= 0.2
+      && punctuationCount(text) / text.length >= 0.02
+      && body.querySelectorAll('p').length >= 6;
+  }
+
+  function detectArticle() {
+    try {
+      let best = 0;
+      for (const el of document.querySelectorAll(ARTICLE_SELECTOR)) {
+        const score = scoreArticleBlock(el);
+        if (score > best) best = score;
+      }
+      if (best + articleMetaBonus() >= ARTICLE_MIN_SCORE) return true;
+      return fallbackLooksLikeArticle();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function refreshArticleDetection() {
+    lastDetectTs = Date.now();
+    const detected = detectArticle();
+    if (detected === articleDetected) return;
+    articleDetected = detected;
+    render();
+  }
+
+  function scheduleArticleDetection(delay = 900) {
+    if (detectTimer || detectAttempts >= 8) return;
+    detectTimer = setTimeout(() => {
+      detectTimer = null;
+      if (articleDetected) return;
+      detectAttempts += 1;
+      refreshArticleDetection();
+    }, delay);
+  }
+
+  function resetArticleDetection() {
+    articleDetected = false;
+    detectAttempts = 0;
+    if (detectTimer) clearTimeout(detectTimer);
+    detectTimer = null;
+    render();
+    scheduleArticleDetection(700);
+  }
+
+  /* 页面内容懒加载 / 站内无刷新跳转时重新识别 */
+  function watchArticleDetection() {
+    try {
+      const mo = new MutationObserver(() => {
+        if (!articleDetected && detectAttempts < 8) scheduleArticleDetection(900);
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+    } catch (e) {
+      /* 忽略 */
+    }
+    setInterval(() => {
+      if (location.href === lastHref) return;
+      lastHref = location.href;
+      resetArticleDetection();
+    }, 1200);
+  }
+
   /* -------------------------------------------------------------------- UI */
 
   const host = document.createElement('div');
   host.id = 'auto-reader-host';
-  host.style.cssText = 'all:initial;display:block;position:fixed;z-index:2147483647;right:14px;top:50%;margin-top:-74px;';
+  /* 先隐藏，等正文识别完成后再由 render() 决定是否显示，避免闪烁 */
+  host.style.cssText = 'all:initial;display:none;position:fixed;z-index:2147483647;right:14px;top:50%;margin-top:-74px;';
   const root = host.attachShadow({ mode: 'open' });
 
   root.innerHTML = `
@@ -353,7 +497,7 @@
     for (const input of toggles) {
       input.checked = !!state[input.dataset.key];
     }
-    host.style.display = state.panelHidden ? 'none' : '';
+    host.style.display = (state.panelHidden || !articleDetected) ? 'none' : '';
     renderProgress();
   }
 
@@ -712,7 +856,7 @@
       const pos = Math.min(readScroll(), max);
       remainingSeconds = Math.round((max - pos) / Math.max(1, state.speed));
     }
-    return { ...state, remainingSeconds, cpm };
+    return { ...state, remainingSeconds, cpm, articleDetected };
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -720,6 +864,7 @@
     const patch = msg.patch || {};
     switch (msg.cmd) {
       case 'get':
+        if (!articleDetected && Date.now() - lastDetectTs > 8000) refreshArticleDetection();
         break;
       case 'toggle':
         toggle();
@@ -758,6 +903,10 @@
         savePrefs({ panelHidden: false });
         render();
         break;
+      case 'togglePanel':
+        savePrefs({ panelHidden: !state.panelHidden });
+        render();
+        break;
       default:
         break;
     }
@@ -781,12 +930,17 @@
 
   (async () => {
     await loadState();
+    articleDetected = detectArticle();
+    lastDetectTs = Date.now();
+    detectAttempts = articleDetected ? 0 : 1;
     if (state.panelPos) {
       host.style.top = state.panelPos.top + 'px';
       host.style.marginTop = '0px';
       host.style.right = state.panelPos.right + 'px';
     }
     render();
+    watchArticleDetection();
+    scheduleArticleDetection(2000);
 
     // 内容脚本首次读取 session 可能早于后台设置访问级别，稍后补读一次
     if (!state.running && state.resumeOnLoad) {

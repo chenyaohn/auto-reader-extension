@@ -19,6 +19,7 @@ const cpmNum = document.getElementById('cpmNum');
 const range = document.getElementById('speedRange');
 const etaEl = document.getElementById('eta');
 const toggleBtn = document.getElementById('toggleBtn');
+const panelBtn = document.getElementById('panelBtn');
 const toggles = [...document.querySelectorAll('input[data-key]')];
 
 let tabId = null;
@@ -59,6 +60,10 @@ function render() {
   const pct = ((state.speed - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100;
   range.style.setProperty('--pct', pct.toFixed(1) + '%');
   cpmNum.textContent = String(state.cpm != null ? state.cpm : Math.round(state.speed * 54));
+  const canShowPanel = state.articleDetected !== false;
+  panelBtn.textContent = state.panelHidden ? '显示控制条' : '隐藏控制条';
+  panelBtn.disabled = !canShowPanel;
+  panelBtn.title = canShowPanel ? '' : '当前页面未通过正文识别，不显示悬浮条';
   for (const input of toggles) input.checked = !!state[input.dataset.key];
 }
 
@@ -110,7 +115,13 @@ toggleBtn.addEventListener('click', async () => {
 });
 
 document.getElementById('topBtn').addEventListener('click', () => send('scrollTop'));
-document.getElementById('panelBtn').addEventListener('click', () => send('showPanel'));
+panelBtn.addEventListener('click', async () => {
+  const res = await send('togglePanel');
+  if (res && res.state) {
+    state = { ...state, ...res.state };
+    render();
+  }
+});
 
 (async () => {
   const tab = await getActiveTab();
@@ -129,6 +140,7 @@ document.getElementById('panelBtn').addEventListener('click', () => send('showPa
   if (!res || !res.state) {
     statusEl.textContent = '此页面不可用';
     toggleBtn.disabled = true;
+    panelBtn.disabled = true;
     etaEl.textContent = '请在普通网页（http / https）上使用';
     return;
   }
